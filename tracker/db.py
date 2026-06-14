@@ -167,6 +167,12 @@ class DB:
         with self.connect() as con:
             return con.execute(q, args).fetchall()
 
+    def checkpoint(self) -> None:
+        """Flush the WAL side-file into tracker.db on disk. Run after a write pass so
+        the committed DB snapshot (and git) actually see the new data."""
+        with self.connect() as con:
+            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
     def latest_cheapest_bin(self, product_id: str) -> Optional[sqlite3.Row]:
         with self.connect() as con:
             return con.execute(

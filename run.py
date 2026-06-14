@@ -37,6 +37,7 @@ def _refresh_listings(tracker, cfg) -> int:
         lock.parent.mkdir(parents=True, exist_ok=True)
         lock.write_text(str(os.getpid()))
         n = tracker.refresh_bin_all()
+        tracker.db.checkpoint()   # flush WAL -> tracker.db so the snapshot is push-ready
         logging.getLogger("run").info("refresh-listings: refreshed %d product(s)", n)
     finally:
         try:
