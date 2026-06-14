@@ -1,0 +1,44 @@
+{
+  "_comment": "Throwaway DEMO config. Uses the mock store + mock prices and its OWN database (data/demo.db) so it never touches your real tracker.db. Used only to show what a populated, 'lit up' dashboard looks like.",
+  "poll_interval_seconds": 300,
+  "price_interval_seconds": 86400,
+  "db_path": "data/demo.db",
+
+  "alerts": { "desktop": false, "discord_webhook": "" },
+
+  "stores": { "mock": { "adapter": "mock" } },
+  "price_sources": { "mock": { "adapter": "mock" } },
+
+  "watchlist": [
+    {
+      "id": "demo-prismatic-etb",
+      "name": "Prismatic Evolutions Elite Trainer Box",
+      "kind": "etb",
+      "set_name": "Scarlet & Violet - Prismatic Evolutions",
+      "stores": { "mock": "https://example.com/prismatic-etb" },
+      "price_sources": { "mock": "demo-prismatic-etb" },
+      "target_buy_price": 28.0,
+      "target_sell_price": 34.0
+    },
+    {
+      "id": "demo-destined-rivals-box",
+      "name": "Destined Rivals Booster Box (36)",
+      "kind": "booster_box",
+      "set_name": "Scarlet & Violet - Destined Rivals",
+      "stores": { "mock": "https://example.com/destined-rivals-box" },
+      "price_sources": { "mock": "demo-destined-rivals-box" },
+      "target_buy_price": 140.0,
+      "target_sell_price": 200.0
+    },
+    {
+      "id": "demo-journey-together-etb",
+      "name": "Journey Together Elite Trainer Box",
+      "kind": "etb",
+      "set_name": "Scarlet & Violet - Journey Together",
+      "stores": { "mock": "https://example.com/journey-together-etb" },
+      "price_sources": { "mock": "demo-journey-together-etb" },
+      "target_buy_price": 25.0,
+      "target_sell_price": 60.0
+    }
+  ]
+}

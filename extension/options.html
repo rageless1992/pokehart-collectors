@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>PokeStock Local Tracker — Settings</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 540px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.3rem; }
+    label { display: block; margin: 1rem 0 0.25rem; font-weight: 600; }
+    input[type=text], input[type=number] { width: 100%; padding: 0.5rem; box-sizing: border-box; }
+    .row { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
+    button { margin-top: 1.5rem; padding: 0.5rem 1rem; }
+    .hint { color: #666; font-size: 0.85rem; }
+    #status { margin-left: 1rem; color: green; }
+  </style>
+</head>
+<body>
+  <h1>🃏 PokeStock Local Tracker</h1>
+  <p class="hint">Checks UK retailer pages in your own browser and posts price/stock to your local tracker app.</p>
+
+  <label>Local app endpoint</label>
+  <input type="text" id="endpoint" placeholder="http://127.0.0.1:8765" />
+
+  <label>Ingest token</label>
+  <input type="text" id="token" placeholder="paste the X-Ingest-Token printed by `python run.py ingest`" />
+  <p class="hint">Found in <code>data/ingest_token.txt</code>, or printed when the app starts.</p>
+
+  <label>Seconds between checks (one product per tick)</label>
+  <input type="number" id="tickSeconds" min="60" value="120" />
+  <p class="hint">Keep this gentle. 120s with ~10 products = each checked ~every 20 min.</p>
+
+  <div class="row">
+    <input type="checkbox" id="enabled" />
+    <label for="enabled" style="margin:0;font-weight:600;">Enabled</label>
+  </div>
+
+  <div class="row">
+    <button id="save">Save</button>
+    <button id="test">Test connection</button>
+    <span id="status"></span>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

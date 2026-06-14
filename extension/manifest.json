@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "PokeStock Local Tracker",
+  "version": "0.1.0",
+  "description": "Reads price + stock from UK retailers in your own browser and feeds your local Pokemon tracker.",
+  "permissions": ["alarms", "storage", "tabs", "scripting"],
+  "host_permissions": [
+    "https://www.argos.co.uk/*",
+    "https://www.smythstoys.com/*",
+    "https://www.very.co.uk/*",
+    "https://www.johnlewis.com/*",
+    "https://www.game.co.uk/*",
+    "https://www.ebay.co.uk/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": { "service_worker": "sw.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.argos.co.uk/product/*",
+        "https://www.smythstoys.com/*/p/*",
+        "https://www.very.co.uk/*.prd*",
+        "https://www.johnlewis.com/*/p*",
+        "https://www.game.co.uk/*"
+      ],
+      "js": ["extract.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.ebay.co.uk/sch/*"],
+      "js": ["ebay.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "action": { "default_title": "PokeStock Local Tracker" }
+}

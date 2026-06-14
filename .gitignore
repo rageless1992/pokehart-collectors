@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+config.local.json
+
+# secrets — never commit
+.streamlit/secrets.toml
+data/ingest_token.txt
+data/ebay_cookies.pkl
+
+# data: ignore everything EXCEPT the committed showcase snapshot
+data/*
+!data/tracker.db
+# sqlite side files
+*.db-wal
+*.db-shm
