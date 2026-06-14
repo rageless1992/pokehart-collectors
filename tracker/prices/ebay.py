@@ -238,6 +238,7 @@ KIND_TOKENS = {
     "booster_bundle": ["booster bundle"],
     "booster_pack": ["booster pack"],
     "build_battle": ["build & battle", "build battle", "build and battle"],
+    "premium_collection": ["premium collection"],
 }
 KIND_BOUNDS = {
     "booster_box": (60, 600),
@@ -246,7 +247,11 @@ KIND_BOUNDS = {
     "booster_bundle": (8, 130),
     "booster_pack": (2, 40),
     "build_battle": (12, 90),
+    "premium_collection": (20, 600),
 }
+# Premium collections are named after the featured Pokémon/theme, NOT the set, so we
+# match them on the product NAME rather than the set name. These words carry no signal.
+_PC_GENERIC = {"premium", "collection", "pokemon", "tcg", "sealed", "the", "of", "and", "ex"}
 EXCLUDE = [
     "empty", "box only", "no cards", "no packs", "proxy", "repack", "re-pack",
     "resealed", "custom", "job lot", "joblot", "bundle of", "bulk", " lot ",
@@ -276,9 +281,15 @@ def _variant_of(tn: str) -> str:
 def _filter_params(product) -> dict:
     """Per-product matching parameters, shared by sold-aggregation and BIN."""
     kind = product.kind if product.kind in KIND_TOKENS else "etb"
+    if kind == "premium_collection":
+        # match on the distinctive product name (e.g. "Masks of Ogerpon"), not the set
+        set_tokens = [w for w in re.split(r"[^a-z0-9]+", _norm(product.name or ""))
+                      if w and w not in _PC_GENERIC and (len(w) >= 3 or w.isdigit())]
+    else:
+        set_tokens = [w for w in re.split(r"[^a-z0-9]+", (product.set_name or "").lower())
+                      if len(w) >= 3 or w.isdigit()]
     return {
-        "set_tokens": [w for w in re.split(r"[^a-z0-9]+", (product.set_name or "").lower())
-                       if len(w) >= 3 or w.isdigit()],
+        "set_tokens": set_tokens,
         "kinds": KIND_TOKENS[kind],
         "bounds": KIND_BOUNDS.get(kind, (8, 600)),
         "want_variant": "pokemon_center" if kind == "etb_pc" else "standard",

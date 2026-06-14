@@ -128,6 +128,7 @@ KIND_LABEL = {
     "booster_box": "Booster Box", "etb": "Elite Trainer Box",
     "etb_pc": "Pokémon Center ETB", "booster_bundle": "Booster Bundle",
     "booster_pack": "Booster Pack", "build_battle": "Build & Battle Box",
+    "premium_collection": "Premium Collection",
 }
 
 
