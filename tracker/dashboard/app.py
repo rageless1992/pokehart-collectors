@@ -105,7 +105,11 @@ def render_gallery():
         cols = st.columns(NCOLS, gap="medium")
         for col, s in zip(cols, sets[i:i + NCOLS]):
             with col:
-                render_tile(s)
+                try:
+                    render_tile(s)
+                except Exception as e:
+                    st.warning(f"⚠️ Couldn't load set {getattr(s, 'code', '?')}")
+                    st.caption(f"{type(e).__name__}: {e}")
 
 
 # --- detail -----------------------------------------------------------------
@@ -198,7 +202,12 @@ def render_detail(s):
         cols = st.columns(PCOLS, gap="medium")
         for col, p in zip(cols, products[i:i + PCOLS]):
             with col:
-                render_product_card(p, s)
+                try:
+                    render_product_card(p, s)
+                except Exception as e:
+                    with st.container(border=True):
+                        st.warning(f"⚠️ Couldn't load **{getattr(p, 'name', '?')}**")
+                        st.caption(f"{type(e).__name__}: {e}")
 
 
 # --- dispatch ---------------------------------------------------------------

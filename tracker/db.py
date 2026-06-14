@@ -174,10 +174,14 @@ class DB:
             con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     def latest_cheapest_bin(self, product_id: str) -> Optional[sqlite3.Row]:
-        with self.connect() as con:
-            return con.execute(
-                "SELECT * FROM ebay_listings WHERE product_id=?", (product_id,)
-            ).fetchone()
+        try:
+            with self.connect() as con:
+                return con.execute(
+                    "SELECT * FROM ebay_listings WHERE product_id=?", (product_id,)
+                ).fetchone()
+        except sqlite3.OperationalError:
+            # Old committed DB without the ebay_listings table (or renamed columns).
+            return None
 
     def open_holdings(self, product_id: Optional[str] = None) -> List[sqlite3.Row]:
         q = "SELECT * FROM inventory WHERE sold_date IS NULL"

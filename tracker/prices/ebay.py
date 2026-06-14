@@ -43,18 +43,74 @@ HEADERS = {
 }
 CHALLENGE_MARKERS = ("pardon our interruption", "px-captcha", "please verify",
                      "splashui", "checkcaptcha")
-MONEY_RE = re.compile(r"[0-9][0-9,]*(?:\.[0-9]{2})?")
+
+# Accept ONLY genuine GBP prices. eBay.co.uk normally renders "£...", but foreign
+# sellers / converted listings can show "US $", "EUR", "approximately £X" etc. — those
+# must never be silently recorded as pounds on a UK tracker.
+_NON_GBP = re.compile(r"(?:US|C|CA|AU|NZ|HK|SGD?)\s*\$|[\$€¥]|EUR|USD|JPY|CAD|AUD|CHF|approx", re.I)
+_GBP_RE = re.compile(r"£\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)")
+
+# Item location. eBay UK prints a "from <Country>" attribute-row ONLY for non-domestic
+# items; UK-located items have no such row. So a "from ..." row => foreign => reject.
+_LOC_RE = re.compile(r"^(?:from|located in)\s+(.+)$", re.I)
+_UK_NAMES = {"united kingdom", "uk", "england", "scotland", "wales",
+             "northern ireland", "great britain"}
+
+
+def gbp_amount(price_text) -> Optional[float]:
+    """Pounds value only if the text is a genuine GBP price, else None.
+
+    Rejects foreign-currency nodes and eBay's converted "approximately £X" before
+    extracting a number. For a "£X to £Y" range, returns the low end.
+    """
+    if not price_text:
+        return None
+    t = price_text.strip()
+    if _NON_GBP.search(t):       # foreign symbol/token or converted price
+        return None
+    if "£" not in t:
+        return None
+    m = _GBP_RE.search(t)        # first GBP amount = low end of any range
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def card_location(card) -> Optional[str]:
+    """Item-location country (e.g. 'Japan'), or None when the card shows no location
+    row. eBay UK omits the row for domestic items, so None == UK-located."""
+    for row in card.select(".s-card__attribute-row"):
+        m = _LOC_RE.match(row.get_text(" ", strip=True))
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+def is_uk_card(card) -> bool:
+    """True unless the card is positively flagged as foreign (a 'from <Country>' row
+    naming a non-UK country). Belt-and-braces on top of the LH_PrefLoc=1 URL filter."""
+    loc = card_location(card)
+    return loc is None or loc.lower() in _UK_NAMES
+
+
+# LH_PrefLoc=1 = "Item location: UK Only" (verified empirically: =2 is a no-op,
+# =3 is European Union; only =1 keeps results 100% UK-located). Keeps a UK price
+# tracker free of overseas sellers shipping in.
+UK_ONLY = "&LH_PrefLoc=1"
 
 
 def sold_url(query: str, ipg: int = 60) -> str:
     return (f"https://www.ebay.co.uk/sch/i.html?_nkw={quote_plus(query)}"
-            f"&LH_Sold=1&LH_Complete=1&_sop=13&_ipg={ipg}")
+            f"&LH_Sold=1&LH_Complete=1&_sop=13&_ipg={ipg}{UK_ONLY}")
 
 
 def bin_url(query: str, ipg: int = 60) -> str:
-    """Active Buy-It-Now search, sorted price + postage ascending (_sop=15)."""
+    """Active Buy-It-Now search, UK-only, sorted price + postage ascending (_sop=15)."""
     return (f"https://www.ebay.co.uk/sch/i.html?_nkw={quote_plus(query)}"
-            f"&LH_BIN=1&_sop=15&_ipg={ipg}")
+            f"&LH_BIN=1&_sop=15&_ipg={ipg}{UK_ONLY}")
 
 
 class EbayClient:
@@ -133,15 +189,17 @@ def parse_sold(html: str) -> List[dict]:
             continue  # template / non-sold card
         if card.select_one(".s-card__reviews, .s-card__product-reviews"):
             continue  # catalog/active card
+        if not is_uk_card(card):
+            continue  # overseas seller (belt-and-braces on LH_PrefLoc=1)
 
-        # price: positive, NON-strikethrough price span(s)
+        # price: positive, NON-strikethrough, GBP-only price span(s)
         prices = []
         for p in card.select(".s-card__price"):
-            classes = p.get("class", [])
-            if "strikethrough" in classes:
+            if "strikethrough" in p.get("class", []):
                 continue
-            for m in MONEY_RE.findall(p.get_text(" ", strip=True)):
-                prices.append(float(m.replace(",", "")))
+            amt = gbp_amount(p.get_text(" ", strip=True))
+            if amt is not None:
+                prices.append(amt)
         if not prices:
             continue
 
@@ -317,13 +375,16 @@ def parse_active(html: str) -> List[dict]:
             continue  # "Shop on eBay" template / non-listing card
         if _is_sponsored(card):
             continue
+        if not is_uk_card(card):
+            continue  # overseas seller (belt-and-braces on LH_PrefLoc=1)
 
         prices = []
         for p in card.select(".s-card__price"):
             if "strikethrough" in p.get("class", []):
                 continue
-            for m in MONEY_RE.findall(p.get_text(" ", strip=True)):
-                prices.append(float(m.replace(",", "")))
+            amt = gbp_amount(p.get_text(" ", strip=True))
+            if amt is not None:
+                prices.append(amt)
         if not prices:
             continue
 
@@ -332,6 +393,7 @@ def parse_active(html: str) -> List[dict]:
             "price": min(prices),
             "url": url,
             "title": title_el.get_text(" ", strip=True) if title_el else "",
+            "location": card_location(card) or "United Kingdom",
         })
     return out
 

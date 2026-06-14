@@ -52,12 +52,28 @@ def cheapest_price(db, products: List[Product]) -> Optional[float]:
 
 
 def latest_ebay_sold(db, product: Product):
-    return db.latest_price(product.id, source="ebay_sold")
+    fn = getattr(db, "latest_price", None)
+    if fn is None:
+        return None
+    try:
+        return fn(product.id, source="ebay_sold")
+    except Exception:
+        return None
 
 
 def latest_cheapest_bin(db, product: Product):
-    """Cheapest active Buy-It-Now listing row (price, url, title, observed_at) or None."""
-    return db.latest_cheapest_bin(product.id)
+    """Cheapest active Buy-It-Now listing row (price, url, title, observed_at) or None.
+
+    Tolerant of an older DB object/schema (e.g. a stale Cloud deploy): if the method
+    or the ebay_listings table is absent, degrade to None rather than crash the card.
+    """
+    fn = getattr(db, "latest_cheapest_bin", None)
+    if fn is None:
+        return None
+    try:
+        return fn(product.id)
+    except Exception:
+        return None
 
 
 def ebay_history(db, product: Product):
