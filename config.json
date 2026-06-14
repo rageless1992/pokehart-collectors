@@ -26,6 +26,16 @@
     "ipg": 60
   },
 
+  "_comment_ebay_bin": "Cheapest active Buy-It-Now listing per product (with buy URL). Refreshed in a STAGGERED rolling loop: `batch` products per monitor cycle. At batch=2 over a 5-min poll, all ~73 refresh about every 3 hours (~0.5 req/min, very gentle on eBay). Shares the warmed cookie jar with ebay_sold. Bump batch to 6 for ~hourly.",
+  "ebay_bin": {
+    "enabled": true,
+    "ipg": 60,
+    "batch": 2,
+    "delay_seconds": 6,
+    "jitter_seconds": 6,
+    "cookie_path": "data/ebay_cookies.pkl"
+  },
+
   "stores": {
     "mock": { "adapter": "mock" },
 

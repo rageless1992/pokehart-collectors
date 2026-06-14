@@ -48,6 +48,10 @@ class Config:
     def ingest(self) -> dict:
         return self.data.get("ingest", {})
 
+    @property
+    def ebay_bin(self) -> dict:
+        return self.data.get("ebay_bin", {})
+
     def sets(self) -> List[PokeSet]:
         out = []
         for sid, s in self.data.get("sets", {}).items():

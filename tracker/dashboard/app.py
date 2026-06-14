@@ -160,6 +160,20 @@ def render_product_card(p, s):
         if p.ebay_query:
             st.markdown(f"[View sold listings ↗]({sold_url(p.ebay_query)})")
 
+        # cheapest active Buy-It-Now listing (with a deal badge vs the sold median)
+        bin_row = D.latest_cheapest_bin(db, p)
+        if bin_row and bin_row["price"]:
+            badge = ""
+            if sold and sold["price"]:
+                spread = (bin_row["price"] - sold["price"]) / sold["price"] * 100
+                badge = (f" · :green[{abs(spread):.0f}% under sold]" if spread <= 0
+                         else f" · :red[{spread:.0f}% over sold]")
+            st.markdown(f"**Cheapest now: £{bin_row['price']:.2f}**{badge}")
+            if bin_row["url"]:
+                st.markdown(f"[Buy this on eBay ↗]({bin_row['url']})")
+        elif p.ebay_query:
+            st.caption("No active BIN listing yet")
+
 
 def render_detail(s):
     st.button("← Back to all sets", on_click=go_to_set, args=(None,))

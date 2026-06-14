@@ -51,6 +51,12 @@ def sold_url(query: str, ipg: int = 60) -> str:
             f"&LH_Sold=1&LH_Complete=1&_sop=13&_ipg={ipg}")
 
 
+def bin_url(query: str, ipg: int = 60) -> str:
+    """Active Buy-It-Now search, sorted price + postage ascending (_sop=15)."""
+    return (f"https://www.ebay.co.uk/sch/i.html?_nkw={quote_plus(query)}"
+            f"&LH_BIN=1&_sop=15&_ipg={ipg}")
+
+
 class EbayClient:
     """One warm session reused across products in a run; cookies persisted to disk."""
 
@@ -83,7 +89,9 @@ class EbayClient:
         self._save_cookies()
 
     def fetch(self, query: str, ipg: int = 60) -> Optional[str]:
-        url = sold_url(query, ipg)
+        return self.fetch_url(sold_url(query, ipg))
+
+    def fetch_url(self, url: str) -> Optional[str]:
         for attempt, wait in enumerate((0, 5, 12)):
             if wait:
                 time.sleep(wait)
@@ -93,13 +101,13 @@ class EbayClient:
                 resp = self.session.get(url, timeout=25, headers={
                     "Referer": HOME, "Sec-Fetch-Site": "same-origin"})
             except Exception as e:
-                log.warning("[ebay] fetch error for %r: %s", query, e)
+                log.warning("[ebay] fetch error for %s: %s", url, e)
                 self._warmed = False
                 continue
             if resp.status_code == 200 and not self._is_challenge(resp):
                 self._save_cookies()
                 return resp.text
-            log.info("[ebay] %s on %r (attempt %d) -> re-warming", resp.status_code, query, attempt + 1)
+            log.info("[ebay] %s on a search (attempt %d) -> re-warming", resp.status_code, attempt + 1)
             self._warmed = False
         return None
 
@@ -207,34 +215,43 @@ def _variant_of(tn: str) -> str:
     return "standard"
 
 
+def _filter_params(product) -> dict:
+    """Per-product matching parameters, shared by sold-aggregation and BIN."""
+    kind = product.kind if product.kind in KIND_TOKENS else "etb"
+    return {
+        "set_tokens": [w for w in re.split(r"[^a-z0-9]+", (product.set_name or "").lower())
+                       if len(w) >= 3 or w.isdigit()],
+        "kinds": KIND_TOKENS[kind],
+        "bounds": KIND_BOUNDS.get(kind, (8, 600)),
+        "want_variant": "pokemon_center" if kind == "etb_pc" else "standard",
+        # build & battle is a valid kind, so don't let its exclude-token reject it
+        "excludes": [x for x in EXCLUDE if not (kind == "build_battle" and "build" in x)],
+    }
+
+
+def _relevant(it: dict, params: dict) -> bool:
+    """True if a listing matches the product (right set, kind, variant, price band)."""
+    tn = " " + _norm(it.get("title", "")) + " "
+    if "pokemon" not in tn:
+        return False
+    if params["set_tokens"] and not all(
+            re.search(rf"\b{re.escape(s)}\b", tn) for s in params["set_tokens"]):
+        return False
+    if not any(k in tn for k in params["kinds"]):
+        return False
+    if _variant_of(tn) != params["want_variant"]:   # reject PC<->standard<->Japanese bleed
+        return False
+    if any(x.strip() in tn for x in params["excludes"]):
+        return False
+    price = it.get("price")
+    lo, hi = params["bounds"]
+    return price is not None and lo <= price <= hi
+
+
 def aggregate(listings: List[dict], product, *, max_samples: int = 15,
               days: int = 45, min_publish: int = 3) -> Optional[dict]:
-    set_tokens = [w for w in re.split(r"[^a-z0-9]+", (product.set_name or "").lower())
-                  if len(w) >= 3 or w.isdigit()]
-    kind = product.kind if product.kind in KIND_TOKENS else "etb"
-    kinds = KIND_TOKENS[kind]
-    lo, hi = KIND_BOUNDS.get(kind, (8, 600))
-    want_variant = "pokemon_center" if kind == "etb_pc" else "standard"
-    # build & battle is a valid kind, so don't let its exclude-token reject it
-    excludes = [x for x in EXCLUDE if not (kind == "build_battle" and "build" in x)]
-
-    kept = []
-    for it in listings:
-        tn = " " + _norm(it.get("title", "")) + " "
-        if "pokemon" not in tn:
-            continue
-        if set_tokens and not all(re.search(rf"\b{re.escape(s)}\b", tn) for s in set_tokens):
-            continue
-        if not any(k in tn for k in kinds):
-            continue
-        if _variant_of(tn) != want_variant:        # reject PC<->standard<->Japanese bleed
-            continue
-        if any(x.strip() in tn for x in excludes):
-            continue
-        price = it.get("price")
-        if price is None or not (lo <= price <= hi):
-            continue
-        kept.append(it)
+    params = _filter_params(product)
+    kept = [it for it in listings if _relevant(it, params)]
 
     if not kept:
         return None
@@ -268,3 +285,70 @@ def aggregate(listings: List[dict], product, *, max_samples: int = 15,
         "max": round(max(prices), 2),
         "sold_at": max(dates).isoformat() if dates else str(today),
     }
+
+
+# --- active Buy-It-Now listings --------------------------------------------
+ITM_RE = re.compile(r"/itm/(?:[^/?#]+/)?(\d+)")
+
+
+def _clean_itm(href: Optional[str]) -> Optional[str]:
+    """Strip eBay tracking params -> canonical /itm/<id> URL."""
+    m = ITM_RE.search(href or "")
+    return f"https://www.ebay.co.uk/itm/{m.group(1)}" if m else None
+
+
+def _is_sponsored(card) -> bool:
+    if card.select_one('.s-card__sponsored, [aria-label="Sponsored"], [aria-label="SPONSORED"]'):
+        return True
+    return any(n.get_text(strip=True).lower() == "sponsored"
+               for n in card.select(".s-card__caption span, .s-card__subtitle span"))
+
+
+def parse_active(html: str) -> List[dict]:
+    """Extract active Buy-It-Now listings (price + canonical item URL) from an SRP."""
+    soup = BeautifulSoup(html, "lxml")
+    out = []
+    for card in soup.select(".su-card-container, .s-card"):
+        if card.select_one(".s-card__reviews, .s-card__product-reviews"):
+            continue  # catalog tile, not a real listing
+        link = card.select_one('a.s-card__link, a[href*="/itm/"]')
+        url = _clean_itm(link.get("href") if link else None)
+        if not url:
+            continue  # "Shop on eBay" template / non-listing card
+        if _is_sponsored(card):
+            continue
+
+        prices = []
+        for p in card.select(".s-card__price"):
+            if "strikethrough" in p.get("class", []):
+                continue
+            for m in MONEY_RE.findall(p.get_text(" ", strip=True)):
+                prices.append(float(m.replace(",", "")))
+        if not prices:
+            continue
+
+        title_el = card.select_one(".s-card__title")
+        out.append({
+            "price": min(prices),
+            "url": url,
+            "title": title_el.get_text(" ", strip=True) if title_el else "",
+        })
+    return out
+
+
+def cheapest_bin(client: "EbayClient", product, ipg: int = 60) -> Optional[dict]:
+    """Cheapest active Buy-It-Now listing matching the product, or None.
+
+    Uses the same query/filter as the sold source so the BIN is comparable to the
+    sold median. `_sop=15` is only a hint — we always min() over filtered candidates.
+    """
+    if not getattr(product, "ebay_query", None):
+        return None
+    html = client.fetch_url(bin_url(product.ebay_query, ipg))
+    if not html:
+        return None
+    params = _filter_params(product)
+    candidates = [it for it in parse_active(html) if _relevant(it, params)]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda x: x["price"])

@@ -49,6 +49,16 @@ CREATE TABLE IF NOT EXISTS alerts (
     message    TEXT,
     created_at TEXT NOT NULL
 );
+
+-- Cheapest active Buy-It-Now eBay listing per product (one upserted row each).
+CREATE TABLE IF NOT EXISTS ebay_listings (
+    product_id  TEXT PRIMARY KEY,
+    price       REAL,
+    currency    TEXT,
+    url         TEXT,
+    title       TEXT,
+    observed_at TEXT NOT NULL
+);
 """
 
 
@@ -101,6 +111,23 @@ class DB:
                  p.sample_size, p.price_min, p.price_max, p.sold_at),
             )
 
+    def record_cheapest_bin(self, product_id: str, price: float, url: str,
+                            title: str = "", currency: str = "GBP",
+                            observed_at: Optional[str] = None) -> None:
+        from .models import utcnow
+        ts = observed_at or utcnow().isoformat()
+        with self.connect() as con:
+            con.execute(
+                """INSERT INTO ebay_listings
+                   (product_id, price, currency, url, title, observed_at)
+                   VALUES (?,?,?,?,?,?)
+                   ON CONFLICT(product_id) DO UPDATE SET
+                     price=excluded.price, currency=excluded.currency,
+                     url=excluded.url, title=excluded.title,
+                     observed_at=excluded.observed_at""",
+                (product_id, price, currency, url, title, ts),
+            )
+
     def record_alert(self, product_id: str, type_: str, message: str) -> None:
         from .models import utcnow
         with self.connect() as con:
@@ -139,6 +166,12 @@ class DB:
         q += " ORDER BY observed_at ASC"
         with self.connect() as con:
             return con.execute(q, args).fetchall()
+
+    def latest_cheapest_bin(self, product_id: str) -> Optional[sqlite3.Row]:
+        with self.connect() as con:
+            return con.execute(
+                "SELECT * FROM ebay_listings WHERE product_id=?", (product_id,)
+            ).fetchone()
 
     def open_holdings(self, product_id: Optional[str] = None) -> List[sqlite3.Row]:
         q = "SELECT * FROM inventory WHERE sold_date IS NULL"

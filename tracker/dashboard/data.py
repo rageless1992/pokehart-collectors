@@ -55,5 +55,10 @@ def latest_ebay_sold(db, product: Product):
     return db.latest_price(product.id, source="ebay_sold")
 
 
+def latest_cheapest_bin(db, product: Product):
+    """Cheapest active Buy-It-Now listing row (price, url, title, observed_at) or None."""
+    return db.latest_cheapest_bin(product.id)
+
+
 def ebay_history(db, product: Product):
     return db.price_history(product.id, source="ebay_sold")
