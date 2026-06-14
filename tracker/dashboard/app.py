@@ -22,6 +22,10 @@ from tracker.prices.ebay import sold_url
 st.set_page_config(page_title="PokeHart Collectors", page_icon=B.make_favicon(), layout="wide")
 st.markdown(B.CSS, unsafe_allow_html=True)
 
+# Bump on every deploy. If the footer shows an older string than expected, the Cloud
+# process is stale (an old build is still resident) — force a rebuild / reboot.
+APP_VERSION = "v2 · 2026-06-15"
+
 
 def _authed() -> bool:
     """Password gate. Active only when an `app_password` secret is set (so local
@@ -137,6 +141,19 @@ def product_image(p, s):
         "https://images.scrydex.com/pokemon/me1-logo/logo"
 
 
+def safe_bin(db, p):
+    """Cheapest-BIN lookup resolved in the (always-fresh) entry script, so it can't
+    break if a cached `data.py`/`db.py` module is stale after a Cloud redeploy.
+    Falls back to None if the DB object predates the ebay_listings support."""
+    fn = getattr(db, "latest_cheapest_bin", None)
+    if fn is None:
+        return None
+    try:
+        return fn(p.id)
+    except Exception:
+        return None
+
+
 def render_product_card(p, s):
     with st.container(border=True):
         st.image(product_image(p, s), use_container_width=True)
@@ -166,7 +183,7 @@ def render_product_card(p, s):
             st.markdown(f"[View sold listings ↗]({sold_url(p.ebay_query)})")
 
         # cheapest active Buy-It-Now listing (with a deal badge vs the sold median)
-        bin_row = D.latest_cheapest_bin(db, p)
+        bin_row = safe_bin(db, p)
         if bin_row and bin_row["price"]:
             badge = ""
             if sold and sold["price"]:
@@ -217,3 +234,6 @@ if selected and selected in SETS_BY_CODE:
     render_detail(SETS_BY_CODE[selected])
 else:
     render_gallery()
+
+st.divider()
+st.caption(f"PokeHart Collectors · build {APP_VERSION}")

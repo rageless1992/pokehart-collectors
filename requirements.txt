@@ -3,5 +3,5 @@ beautifulsoup4>=4.12
 lxml>=5.0
 plyer>=2.1
 pandas>=2.0
-streamlit>=1.33
+streamlit>=1.40
 playwright>=1.44
